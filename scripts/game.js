@@ -20,32 +20,35 @@ function createGameParts(){
     canvas.height = canvas.width * (9 / 16);
     var context = canvas.getContext('2d');
 
-    var BU = canvas.width / 1400;
+    var BU = canvas.width / 1400;       //canvas.width = 1400 * BU      -       canvas.height = 787 * BU
 
-    var fieldUpperLeftX = 10*BU;
+    var fieldUpperLeftX = 10 * BU;
     var fieldUpperLeftY = 20 * BU;
     var fieldWidth = canvas.width - 20 * BU;
     var fieldHeight = canvas.height - 40 * BU;
     var fieldLineWidth = 10 * BU;
+    var brickWidth = 60 * BU;
+    var brickHeight = 20 * BU;
     var paddleWidth = 140 * BU;
     var paddleHeight = 20 * BU;
-    var paddleSpeed = 35 * BU;
+    var paddleSpeed = 45 * BU;
     var ballRadius = 10 * BU;
-    var ballSpeed = 45 * BU;
+    var ballSpeed = 30 * BU;
     var ballDir = getRand(6, 9) * Math.PI / 5;
 
-    var field = new Field(fieldUpperLeftX, fieldUpperLeftY, fieldWidth, fieldHeight, fieldLineWidth);
-    var paddle = new Paddle(canvas.width / 2, fieldUpperLeftY + fieldHeight, paddleWidth, paddleHeight, paddleSpeed, fieldUpperLeftX, fieldUpperLeftX + fieldWidth, 0.2 * paddleWidth, 0.1 * paddleWidth, Math.PI / 10);
-    var ball = new Ball(canvas.width / 2, canvas.height / 2, ballRadius, ballSpeed, ballDir);
+    var field = new Field(fieldUpperLeftX, fieldUpperLeftY, fieldWidth, fieldHeight, fieldLineWidth, brickWidth, brickHeight);
+    field.loadLayout(new BrickLayout);
+    var paddle = new Paddle(canvas.width / 2, fieldUpperLeftY + fieldHeight, paddleWidth, paddleHeight, paddleSpeed, fieldUpperLeftX, fieldUpperLeftX + fieldWidth, 0.2 * paddleWidth, 0.1 * paddleWidth, Math.PI / 15);
+    var ball = new Ball(canvas.width / 2, fieldUpperLeftY + fieldHeight, ballRadius, ballSpeed, ballDir);
 
 	setTimeout(function () {
-	    animate(field, paddle, ball, canvas, context, (new Date()).getTime());
-	}, 1000);
+	    animate(field, paddle, ball, canvas, context, Date.now());
+	}, 3000);
 };
 
 
 function animate(field, paddle, ball, canvas, context, previoustime) {
-    var now = (new Date()).getTime();
+    var now = Date.now();
     var timediff = (now - previoustime)/100;
 
     if (field.bounceBall(ball) == false) {
@@ -67,7 +70,6 @@ function animate(field, paddle, ball, canvas, context, previoustime) {
     });
 	
 };
-
 
 
 // **********  Ball  **********
@@ -116,10 +118,10 @@ function Paddle(upperLeftX, upperLeftY, width, height, v, leftBoundary, rightBou
 }
 
 Paddle.prototype.move = function (timediff) {
-    if (Key.isDown(Key.A) && this.upperLeftX >= this.leftBoundary) {
+    if (Key.isLeft() && this.upperLeftX >= this.leftBoundary) {
         this.upperLeftX -= this.v * timediff;
     }
-    if (Key.isDown(Key.D) && this.upperLeftX + this.width <= this.rightBoundary) {
+    if (Key.isRight() && this.upperLeftX + this.width <= this.rightBoundary) {
         this.upperLeftX += this.v * timediff;
     }
 };
@@ -128,10 +130,12 @@ Paddle.prototype.bounceBall = function (ball) {
 
     if (ball.x >= this.upperLeftX + this.chX && ball.x <= this.upperLeftX + this.width - this.chX && ball.ro < Math.PI) {
         ball.ro = 2 * Math.PI - ball.ro; // bouncing from the horizontal part
-        if (Key.isDown(Key.A)) {
-            ball.ro -= this.delta;
-        } else if (Key.isDown(Key.D)) {
-            ball.ro += this.delta;
+        if (ball.ro > Math.PI + 2 * this.delta && ball.ro < 2 * Math.PI - 2 * this.delta) { // we add delta only if its not too close to horizontal
+            if (Key.isLeft()) {
+                ball.ro -= this.delta;
+            } else if (Key.isRight()) {
+                ball.ro += this.delta;
+            }
         }
         return true;
     } else if (ball.x >= this.upperLeftX && ball.x < this.upperLeftX + this.chX && ball.ro < Math.PI) {
@@ -165,16 +169,19 @@ Paddle.prototype.draw = function (context) {
 
 // **********  Field  **********
 
-function Field (upperLeftX, upperLeftY, width, height, lineWidth) {
+function Field (upperLeftX, upperLeftY, width, height, lineWidth, brickWidth, brickHeight) {
     this.upperLeftX = upperLeftX;
     this.upperLeftY = upperLeftY;
     this.width = width;
     this.height = height;
     this.lineWidth = lineWidth;
+    this.brickWidth = brickWidth;
+    this.brickHeight = brickHeight;
     this.colors = ["White", "Red", "Blue", "Yellow", "Magenta", "Green"];
     this.leftWallColor = 0;
     this.rightWallColor = 0;
     this.topWallColor = 0;
+    this.bricks = new Array();
 }
 
 Field.prototype.draw = function(context) {
@@ -198,7 +205,43 @@ Field.prototype.draw = function(context) {
     context.lineTo(this.upperLeftX + this.width, this.upperLeftY + this.height);
     context.strokeStyle = this.colors[this.rightWallColor];
     context.stroke();
+
+    for (var i = 0; i < this.bricks.length; ++i) {
+        if (!this.bricks[i].exploded) {
+            this.bricks[i].draw(context);                    //draw the bricks as well
+        }
+    }
     
+
+};
+
+Field.prototype.loadLayout = function (layout) {
+    var midFieldX = this.upperLeftX + this.width / 2;
+    var midFieldY = this.upperLeftY + this.height * 0.45;
+    var dX = 0;
+    var dY = 0;
+
+    layout.reset();
+
+    while (midFieldY - dY > this.upperLeftY + 4 * this.brickHeight) {
+        var cond1 = midFieldY - dY;
+        var cond2 = this.upperLeftY + 4 * this.brickHeight;
+        while (midFieldX - dX > this.upperLeftX + 2 * this.brickWidth) {
+            var cond3 = midFieldX - dX;
+            var cond4 = this.upperLeftX + 2 * this.brickWidth;
+            var brickData = layout.giveNextBrickInRow();
+            if (brickData.type != 'void') {
+                this.bricks.push(new Brick(midFieldX + dX, midFieldY - dY, this.brickWidth, this.brickHeight, brickData.type, brickData.color));
+                if (dX != 0) {
+                    this.bricks.push(new Brick(midFieldX - dX, midFieldY - dY, this.brickWidth, this.brickHeight, brickData.type, brickData.color));
+                }
+            }
+            dX += this.brickWidth / 2;
+        }
+        layout.stepToNextRow();
+        dX = 0;
+        dY += 3 * this.brickHeight;
+    }
 
 };
 
@@ -229,14 +272,60 @@ Field.prototype.bounceBall = function(ball) {
         this.topWallColor < this.colors.length - 1 ? ++this.topWallColor : this.topWallColor = 0;
     }
 
+    for (var i = 0; i < this.bricks.length; ++i) {
+        if (this.bricks[i].exploding == false) {
+            this.bricks[i].bounceBall(ball);                  //check the bricks against the ball
+        }
+    }
+
     return true;
 };
 // **********  End of Paddle  **********
 
 
+// **********  BrickLAyout  **********
+
+function BrickLayout() {
+    this.row = 0;
+    this.col = 0;
+    this.pattern = [[ {type: 'void' }, {type: 'void' }, { type: 'basic', color: 'blue' } ],  //first row
+                    [{ type: 'basic', color: 'red' }, { type: 'void' }, { type: 'void' }]];  // second row
+}
+
+BrickLayout.prototype.giveNextBrickInRow = function () {
+
+    var result = this.pattern[this.row][this.col];
+
+    if (this.col == this.pattern[this.row].length - 1) {
+        this.col = 0;
+    } else {
+        ++this.col;
+    }
+
+    return result;
+};
+
+BrickLayout.prototype.stepToNextRow = function () {
+    this.col = 0;
+    ++this.row;
+    if (this.row == this.pattern.length) {
+        this.row = 0;
+    }
+};
+
+BrickLayout.prototype.reset = function () {
+    this.rowPos = 0;
+    this.colPos = 0;
+};
+
+
+
+// **********  End of BrickLAyout  **********
+
+
 // **********  Brick  **********
 
-function Brick(middleX, middleY, width, height, color) {
+function Brick(middleX, middleY, width, height, type, color) {
     this.middleX = middleX;
     this.middleY = middleY;
     this.width = width;
@@ -254,60 +343,55 @@ function Brick(middleX, middleY, width, height, color) {
     this.p4X = this.p1X;
     this.p4Y = this.p3Y;
 
-    this.ro = rotation;
+    this.type = type;
     this.color = color;
     this.exploding = false;
-    this.explosionTime;
     this.exploded = false;
 }
 
 Brick.prototype.draw = function(ctx) {
     if (this.exploding == false) {
         ctx.beginPath();
-        ctx.rect (this.middleX - this.width /2, this.middleY - this.height/2, width, height);
-        var grd = ctx.createRadialGradient(this.middleX, this.middleY, this.width/7, this.middleX, this.middleY, this.width/5,);
-        grd.addColorStop(0, "white");
-        grd.addColorStop(1, color);
-        ctx.fillStyle = grd;
+        ctx.rect (this.middleX - this.width /2, this.middleY - this.height/2, this.width, this.height);
+        ctx.fillStyle = this.color;
         ctx.fill();
-        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = this.color;
         ctx.stroke();
     } else {
-        var timeDelta = new Date().getTime() - this.explosionTime;
+        var timeDelta = Date.now() - this.explosionTime;
         if (timeDelta > 3000) {
             this.exploded = true;
             return;
         }
         ctx.save();
-        ctx.scale(1- 3000/timeDelta, 1- 3000/timeDelta);
-        ctx.globalAlpha = 1 - 3000/timeDelta;
+        ctx.scale(1- timeDelta/3000, 1- timeDelta/3000);
+        ctx.globalAlpha = 1 - timeDelta / 3000;
         ctx.beginPath();
-        ctx.rect (this.middleX - this.width /2, this.middleY - this.height/2, width, height);
-        var grd = ctx.createRadialGradient(this.middleX, this.middleY, this.width/7, this.middleX, this.middleY, this.width/5,);
-        grd.addColorStop(0, "white");
-        grd.addColorStop(1, color);
-        ctx.fillStyle = grd;
+        ctx.rect (this.middleX - this.width /2, this.middleY - this.height/2, this.width, this.height);
+        ctx.fillStyle = this.color;
         ctx.fill();
-        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = this.color;
         ctx.stroke();
         ctx.restore();
     }
 
 };
 
-Brick.prototype.checkBall = function(ball) {   
+Brick.prototype.bounceBall = function(ball) {   
     if (ball.x > this.p1X - ball.r &&
         ball.x < this.p2X + ball.r &&
         ball.y > this.p1Y - ball.r &&
         ball.y < this.p3Y + ball.r) 
     {
         this.exploding = true;
-        this.explosionTime = new Date().getTime();
+        this.explosionTime = Date.now();
 
-        if (ball.x >= this.p1X && ball.x <= this.p2X && ball.y < this.p1Y && ball.ro < Math.PI) { // ball coming from above
+        if (ball.x >= this.p1X - ball.r && ball.x <= this.p2X + ball.r && ball.y < this.p1Y && ball.ro < Math.PI) { // ball coming from above
             ball.ro = 2 * Math.PI - ball.ro;
         }
-        if (ball.x >= this.p1X && ball.x <= this.p2X && ball.y > this.p3Y && ball.ro > Math.PI) {    // ball coming from below
+        if (ball.x >= this.p1X - ball.r && ball.x <= this.p2X + ball.r && ball.y > this.p3Y && ball.ro > Math.PI) {    // ball coming from below
             ball.ro = 2 * Math.PI - ball.ro;
         }
         if (ball.y >= this.p2Y && ball.y <= this.p3Y && ball.x < this.p1X && (ball.ro < Math.PI / 2 || ball.ro > 3 * Math.PI / 2)) {    // ball coming from left
@@ -341,9 +425,21 @@ var Key = {
     D: 68,
     S: 83,
     SPACE: 32,
+    Left: 37,
+    Up: 38,
+    Right: 39,
+    Down: 40,
 
     isDown: function (keyCode) {
         return this._pressed[keyCode];
+    },
+
+    isLeft: function () {
+        return (this._pressed[this.A] || this._pressed[this.Left]);
+    },
+
+    isRight: function () {
+        return (this._pressed[this.D] || this._pressed[this.Right]);
     },
 
     onKeydown: function (event) {
@@ -354,7 +450,9 @@ var Key = {
         delete this._pressed[event.keyCode];
     }
 };
+
 // **********  End of Keyboard  **********
+
 
 // **********  Utilities  **********
 function getRand(min, max) {
