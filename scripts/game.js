@@ -22,10 +22,12 @@ function createGameParts(){
 
     var BU = canvas.width / 1400;       //canvas.width = 1400 * BU      -       canvas.height = 787 * BU
 
+    var scoreLeftX = 10 * BU;
+    var scoreLeftY = 25 * BU;
     var fieldUpperLeftX = 10 * BU;
-    var fieldUpperLeftY = 20 * BU;
+    var fieldUpperLeftY = 50 * BU;
     var fieldWidth = canvas.width - 20 * BU;
-    var fieldHeight = canvas.height - 40 * BU;
+    var fieldHeight = canvas.height - 70 * BU;
     var fieldLineWidth = 10 * BU;
     var brickWidth = 60 * BU;
     var brickHeight = 20 * BU;
@@ -36,18 +38,19 @@ function createGameParts(){
     var ballSpeed = 30 * BU;
     var ballDir = getRand(6, 9) * Math.PI / 5;
 
+    var score = new Score(scoreLeftX, scoreLeftY, scoreLeftX + fieldWidth, scoreLeftY, 2.5 * ballRadius, ballRadius);
     var field = new Field(fieldUpperLeftX, fieldUpperLeftY, fieldWidth, fieldHeight, fieldLineWidth, brickWidth, brickHeight);
     field.loadLayout(new BrickLayout);
     var paddle = new Paddle(canvas.width / 2, fieldUpperLeftY + fieldHeight, paddleWidth, paddleHeight, paddleSpeed, fieldUpperLeftX, fieldUpperLeftX + fieldWidth, 0.2 * paddleWidth, 0.1 * paddleWidth, Math.PI / 15);
     var ball = new Ball(canvas.width / 2, fieldUpperLeftY + fieldHeight, ballRadius, ballSpeed, ballDir);
 
 	setTimeout(function () {
-	    animate(field, paddle, ball, canvas, context, Date.now());
+	    animate(score, field, paddle, ball, canvas, context, Date.now());
 	}, 3000);
 };
 
 
-function animate(field, paddle, ball, canvas, context, previoustime) {
+function animate(score, field, paddle, ball, canvas, context, previoustime) {
     var now = Date.now();
     var timediff = (now - previoustime)/100;
 
@@ -61,12 +64,13 @@ function animate(field, paddle, ball, canvas, context, previoustime) {
     ball.move(timediff);
 
     context.clearRect(0, 0, canvas.width, canvas.height);
+    score.draw(context);
     field.draw(context);
     paddle.draw(context);
     ball.draw(context);
 
     requestAnimFrame(function () {
-        animate(field, paddle, ball, canvas, context, now);
+        animate(score, field, paddle, ball, canvas, context, now);
     });
 	
 };
@@ -94,7 +98,7 @@ Ball.prototype.draw = function (context) {
     context.fillStyle = 'white';
     context.fill();
     context.lineWidth = 1;
-    context.strokeStyle = 'orange';
+    context.strokeStyle = 'white';
     context.stroke();
 
 };
@@ -165,6 +169,48 @@ Paddle.prototype.draw = function (context) {
     context.stroke();
 };
 // **********  End of Paddle  **********
+
+
+// **********  Score  **********
+
+function Score(leftX, leftY, rightX, rightY, height, ballRadius) {
+    this.leftX = leftX;
+    this.leftY = leftY;
+    this.rightX = rightX;
+    this.rightY = rightY;
+    this.height = height;
+    this.ballRadius = ballRadius;
+    this.points = 0;
+    this.balls = 5;
+}
+
+Score.prototype.draw = function (ctx) {
+    var fontText = "italic " + this.height + "px Arial";
+    ctx.font = fontText;
+    ctx.fillText(this.points, this.leftX, this.leftY + this.height / 2);
+
+    for (var i = 1; i <= this.balls; ++i) {
+        ctx.beginPath();
+        ctx.arc(this.rightX - 3 * i * this.ballRadius, this.rightY, this.ballRadius, 0, 2 * Math.PI, false);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'white';
+        ctx.stroke();
+    }
+    
+};
+
+Score.prototype.update = function (points) {
+    this.points += points;
+};
+
+Score.prototype.updateBalls = function (number) {
+    this.balls += number;
+};
+
+
+// **********  End of Score  **********
 
 
 // **********  Field  **********
