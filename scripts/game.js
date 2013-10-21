@@ -1,5 +1,4 @@
 
-
 window.onload = createGameParts;
 
 window.requestAnimFrame = (function(callback) 
@@ -24,6 +23,7 @@ function createGameParts(){
 
     var scoreLeftX = 10 * BU;
     var scoreLeftY = 25 * BU;
+    var ballNumber = 3;
     var fieldUpperLeftX = 10 * BU;
     var fieldUpperLeftY = 50 * BU;
     var fieldWidth = canvas.width - 20 * BU;
@@ -36,41 +36,66 @@ function createGameParts(){
     var paddleSpeed = 45 * BU;
     var ballRadius = 10 * BU;
     var ballSpeed = 30 * BU;
-    var ballDir = getRand(6, 9) * Math.PI / 5;
+    var ballDir = Math.PI / 2;
 
-    var score = new Score(scoreLeftX, scoreLeftY, scoreLeftX + fieldWidth, scoreLeftY, 2.5 * ballRadius, ballRadius);
-    var field = new Field(fieldUpperLeftX, fieldUpperLeftY, fieldWidth, fieldHeight, fieldLineWidth, brickWidth, brickHeight);
-    field.loadLayout(new BrickLayout);
-    var paddle = new Paddle(canvas.width / 2, fieldUpperLeftY + fieldHeight, paddleWidth, paddleHeight, paddleSpeed, fieldUpperLeftX, fieldUpperLeftX + fieldWidth, 0.2 * paddleWidth, 0.1 * paddleWidth, Math.PI / 15);
-    var ball = new Ball(canvas.width / 2, fieldUpperLeftY + fieldHeight, ballRadius, ballSpeed, ballDir);
+    var score = new Score(scoreLeftX, scoreLeftY, scoreLeftX + fieldWidth, scoreLeftY, 2.5 * ballRadius, ballRadius, ballNumber);
+    var field = new Field(score, new BrickLayoutStore(), fieldUpperLeftX, fieldUpperLeftY, fieldWidth, fieldHeight, fieldLineWidth, brickWidth, brickHeight);
+    field.loadLayout();
+    var paddle = new Paddle(canvas.width / 2 - paddleWidth / 2, fieldUpperLeftY + fieldHeight, paddleWidth, paddleHeight, paddleSpeed, fieldUpperLeftX, fieldUpperLeftX + fieldWidth, 0.2 * paddleWidth, 0.1 * paddleWidth, Math.PI / 15);
+    var ball = new Ball(canvas.width / 2, field.upperLeftY + field.height * 0.70, ballRadius, ballSpeed, ballDir);
+    ball.pause = true;
 
-	setTimeout(function () {
-	    animate(score, field, paddle, ball, canvas, context, Date.now());
-	}, 3000);
+    animate(field, paddle, ball, canvas, context, Date.now(), Date.now());
 };
 
 
-function animate(score, field, paddle, ball, canvas, context, previoustime) {
+function animate(field, paddle, ball, canvas, context, previoustime, ballDelay) {
     var now = Date.now();
-    var timediff = (now - previoustime)/100;
+    var timediff = (now - previoustime) / 100;  // 0.1 sec
 
-    if (field.bounceBall(ball) == false) {
-        if (paddle.bounceBall(ball) == false) {
-            // fail - reset ball, update score
+    if (field.score.remainingBricks == 0) {
+        field.loadLayout();
+        ballDelay = now;
+        ball.x = canvas.width / 2;
+        ball.y = field.upperLeftY + field.height * 0.70;
+        ball.ro = Math.PI / 2;
+        ball.pause = true;
+    }
+
+    if (field.bounceBall(ball, paddle) == false) {
+        if (field.score.balls == 0) {
+            //game over animation
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            requestAnimFrame(function () {
+                createGameParts();
+            });
+            return;
         }
+        ballDelay = now;
+        ball.x = canvas.width / 2;
+        ball.y = field.upperLeftY + field.height * 0.70;
+        ball.ro = Math.PI / 2;
+        ball.pause = true;
+        --field.score.balls;
     }
 
     paddle.move(timediff);
     ball.move(timediff);
 
     context.clearRect(0, 0, canvas.width, canvas.height);
-    score.draw(context);
+
+    if (ballDelay != 0 && now - ballDelay > 1500) {
+        ball.pause = false;
+        ballDelay = 0;
+    }
+
+    field.score.draw(context);
     field.draw(context);
     paddle.draw(context);
     ball.draw(context);
 
     requestAnimFrame(function () {
-        animate(score, field, paddle, ball, canvas, context, now);
+        animate(field, paddle, ball, canvas, context, now, ballDelay);
     });
 	
 };
@@ -84,9 +109,13 @@ function Ball(x, y, r, v, ro) {
     this.r = r;
     this.v = v; // px/sec
     this.ro = ro; // rad - 0 is 3 o'clock - clockwise+
+    this.pause = false;
 }
 
 Ball.prototype.move = function (timediff) {
+    if (this.pause == true) {
+        return;
+    }
     this.x += this.v * timediff * Math.cos(this.ro);
     this.y += this.v * timediff * Math.sin(this.ro);
 
@@ -141,16 +170,15 @@ Paddle.prototype.bounceBall = function (ball) {
                 ball.ro += this.delta;
             }
         }
-        return true;
-    } else if (ball.x >= this.upperLeftX && ball.x < this.upperLeftX + this.chX && ball.ro < Math.PI) {
-        ball.ro = 2 * Math.PI - ball.ro - this.beta;    //bouncing from the left chamfer
-        return true;
-    } else if (ball.x > this.upperLeftX + this.width - this.chX && ball.x <= this.upperLeftX + this.width && ball.ro < Math.PI) {
-        ball.ro = 2 * Math.PI - ball.ro + this.beta;    //bouncing from the right chamfer
-        return true;
+    } else if (ball.x >= this.upperLeftX - ball.r && ball.x < this.upperLeftX + this.chX && ball.ro < Math.PI) {
+        if (distanceOfPointAndLine(ball.x, ball.y, this.upperLeftX, this.upperLeftY + this.chY, this.upperLeftX + this.chX, this.upperLeftY) < ball.r) {    
+            ball.ro = 2 * Math.PI - ball.ro - this.beta;    //bouncing from the left chamfer
+        }
+    } else if (ball.x > this.upperLeftX + this.width - this.chX && ball.x <= this.upperLeftX + ball.r + this.width && ball.ro < Math.PI) {
+        if (distanceOfPointAndLine(ball.x, ball.y, this.upperLeftX + this.width - this.chX, this.upperLeftY, this.upperLeftX + this.width, this.upperLeftY + this.chY) < ball.r) {
+            ball.ro = 2 * Math.PI - ball.ro + this.beta;    //bouncing from the right chamfer
+        }
     }
-
-    return false;
 };
 
 Paddle.prototype.draw = function (context) {
@@ -173,15 +201,16 @@ Paddle.prototype.draw = function (context) {
 
 // **********  Score  **********
 
-function Score(leftX, leftY, rightX, rightY, height, ballRadius) {
+function Score(leftX, leftY, rightX, rightY, height, ballRadius, ballNumber) {
     this.leftX = leftX;
     this.leftY = leftY;
     this.rightX = rightX;
     this.rightY = rightY;
     this.height = height;
     this.ballRadius = ballRadius;
+    this.balls = ballNumber;
     this.points = 0;
-    this.balls = 5;
+    this.remainingBricks = 0;
 }
 
 Score.prototype.draw = function (ctx) {
@@ -205,17 +234,14 @@ Score.prototype.update = function (points) {
     this.points += points;
 };
 
-Score.prototype.updateBalls = function (number) {
-    this.balls += number;
-};
-
-
 // **********  End of Score  **********
 
 
 // **********  Field  **********
 
-function Field (upperLeftX, upperLeftY, width, height, lineWidth, brickWidth, brickHeight) {
+function Field (score, layoutStore, upperLeftX, upperLeftY, width, height, lineWidth, brickWidth, brickHeight) {
+    this.score = score;
+    this.layoutStore = layoutStore;
     this.upperLeftX = upperLeftX;
     this.upperLeftY = upperLeftY;
     this.width = width;
@@ -254,14 +280,15 @@ Field.prototype.draw = function(context) {
 
     for (var i = 0; i < this.bricks.length; ++i) {
         if (!this.bricks[i].exploded) {
-            this.bricks[i].draw(context);                    //draw the bricks as well
+            this.bricks[i].draw(context, this.score);                    //draw the bricks as well
         }
     }
     
 
 };
 
-Field.prototype.loadLayout = function (layout) {
+Field.prototype.loadLayout = function () {
+    var layout = this.layoutStore.getNextLayout();
     var midFieldX = this.upperLeftX + this.width / 2;
     var midFieldY = this.upperLeftY + this.height * 0.45;
     var dX = 0;
@@ -278,8 +305,10 @@ Field.prototype.loadLayout = function (layout) {
             var brickData = layout.giveNextBrickInRow();
             if (brickData.type != 'void') {
                 this.bricks.push(new Brick(midFieldX + dX, midFieldY - dY, this.brickWidth, this.brickHeight, brickData.type, brickData.color));
+                ++this.score.remainingBricks;
                 if (dX != 0) {
                     this.bricks.push(new Brick(midFieldX - dX, midFieldY - dY, this.brickWidth, this.brickHeight, brickData.type, brickData.color));
+                    ++this.score.remainingBricks;
                 }
             }
             dX += this.brickWidth / 2;
@@ -291,10 +320,15 @@ Field.prototype.loadLayout = function (layout) {
 
 };
 
-Field.prototype.bounceBall = function(ball) {
+Field.prototype.bounceBall = function(ball, paddle) {
 
     if (ball.y >= this.upperLeftY + this.height - ball.r && ball.ro < Math.PI) {    // bottom
-        return false;
+
+        paddle.bounceBall(ball);
+
+        if (ball.y > this.upperLeftY + this.height + paddle.chY && ball.ro < Math.PI) {
+            return false;
+        }
     }
    
     if (ball.x <= this.upperLeftX + this.lineWidth/2 + ball.r && ball.ro > Math.PI / 2 && ball.ro < 3 * Math.PI / 2) {  //left wall
@@ -329,13 +363,46 @@ Field.prototype.bounceBall = function(ball) {
 // **********  End of Paddle  **********
 
 
-// **********  BrickLAyout  **********
+// **********  BrickLayoutStore  **********
+
+function BrickLayoutStore() {
+    this.counter = 0;
+    this.brickLayouts = new Array();
+
+    this.brickLayouts[0] = new BrickLayout();
+    this.brickLayouts[0].pattern =  [[{ type: 'void' }, { type: 'void' }, { type: 'basic', color: 'blue' }],  //first row
+                                    [{ type: 'basic', color: 'red' }, { type: 'void' }, { type: 'void' }]];   // second row
+
+    this.brickLayouts[1] = new BrickLayout();
+    this.brickLayouts[1].pattern =  [[{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic', color: 'magenta' }],     //first row
+                                    [{ type: 'basic', color: 'yellow' }, { type: 'void' }, { type: 'void' }]];                       //second row
+
+    this.brickLayouts[2] = new BrickLayout();
+    this.brickLayouts[2].pattern =  [[{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic', color: 'red' }],     //first row
+                                    [{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic', color: 'red' }],                       //second row
+                                    [{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic', color: 'red' }]   ];                                     //third row
+
+}
+
+BrickLayoutStore.prototype.getNextLayout = function() {
+    var layout = this.brickLayouts[this.counter];
+    ++this.counter;
+    if (this.counter == this.brickLayouts.length) {
+        this.counter = 0;
+    }
+
+    return layout;
+}
+
+// **********  End of BrickLayoutStore  **********
+
+
+// **********  BrickLayout  **********
 
 function BrickLayout() {
     this.row = 0;
     this.col = 0;
-    this.pattern = [[ {type: 'void' }, {type: 'void' }, { type: 'basic', color: 'blue' } ],  //first row
-                    [{ type: 'basic', color: 'red' }, { type: 'void' }, { type: 'void' }]];  // second row
+    this.pattern;
 }
 
 BrickLayout.prototype.giveNextBrickInRow = function () {
@@ -365,8 +432,7 @@ BrickLayout.prototype.reset = function () {
 };
 
 
-
-// **********  End of BrickLAyout  **********
+// **********  End of BrickLayout  **********
 
 
 // **********  Brick  **********
@@ -395,7 +461,7 @@ function Brick(middleX, middleY, width, height, type, color) {
     this.exploded = false;
 }
 
-Brick.prototype.draw = function(ctx) {
+Brick.prototype.draw = function(ctx, score) {
     if (this.exploding == false) {
         ctx.beginPath();
         ctx.rect (this.middleX - this.width /2, this.middleY - this.height/2, this.width, this.height);
@@ -408,6 +474,8 @@ Brick.prototype.draw = function(ctx) {
         var timeDelta = Date.now() - this.explosionTime;
         if (timeDelta > 3000) {
             this.exploded = true;
+            score.update(100);
+            --score.remainingBricks;
             return;
         }
         ctx.save();
@@ -507,6 +575,24 @@ function getRand(min, max) {
 
 function getRandInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1) + min);
+}
+
+function distanceOfPointAndLine(px, py, ax, ay, bx, by) {
+
+    // distance (x=a+t*n , p) = ||(a-p) - ((a-p)*n)*n ||
+
+    var dist_ab = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
+    var nx = (bx - ax) / dist_ab;
+    var ny = (by - ay) / dist_ab;
+
+    var a_min_p_x = ax - px;
+    var a_min_p_y = ay - py;
+    var a_min_p_proj = a_min_p_x * nx + a_min_p_y * ny;
+
+    var dist_x = a_min_p_x - a_min_p_proj * nx;
+    var dist_y = a_min_p_y - a_min_p_proj * ny;
+
+    return Math.sqrt(dist_x * dist_x + dist_y * dist_y);
 }
 
 // **********  End of Utilities  **********
