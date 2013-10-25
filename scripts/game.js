@@ -13,6 +13,9 @@ window.requestAnimFrame = (function(callback)
 							})();
 							
 
+
+
+
 function createGameParts(){
     var canvas = document.getElementById("gameCanvas");
     canvas.width = window.innerWidth * 0.85;
@@ -28,7 +31,8 @@ function createGameParts(){
     var fieldUpperLeftY = 50 * BU;
     var fieldWidth = canvas.width - 20 * BU;
     var fieldHeight = canvas.height - 70 * BU;
-    var fieldLineWidth = 10 * BU;
+    var fieldLineWidth = 2 * BU;
+    var fieldMaxSpecialBricks = 4;
     var brickWidth = 60 * BU;
     var brickHeight = 20 * BU;
     var paddleWidth = 140 * BU;
@@ -39,7 +43,7 @@ function createGameParts(){
     var ballDir = Math.PI / 2;
 
     var score = new Score(scoreLeftX, scoreLeftY, scoreLeftX + fieldWidth, scoreLeftY, 2.5 * ballRadius, ballRadius, ballNumber);
-    var field = new Field(score, new BrickLayoutStore(), fieldUpperLeftX, fieldUpperLeftY, fieldWidth, fieldHeight, fieldLineWidth, brickWidth, brickHeight);
+    var field = new Field(score, new BrickLayoutStore(), fieldUpperLeftX, fieldUpperLeftY, fieldWidth, fieldHeight, fieldLineWidth, brickWidth, brickHeight, fieldMaxSpecialBricks);
     field.loadLayout();
     var paddle = new Paddle(canvas.width / 2 - paddleWidth / 2, fieldUpperLeftY + fieldHeight, paddleWidth, paddleHeight, paddleSpeed, fieldUpperLeftX, fieldUpperLeftX + fieldWidth, 0.2 * paddleWidth, 0.1 * paddleWidth, Math.PI / 15);
     var ball = new Ball(canvas.width / 2, field.upperLeftY + field.height * 0.70, ballRadius, ballSpeed, ballDir);
@@ -239,7 +243,7 @@ Score.prototype.update = function (points) {
 
 // **********  Field  **********
 
-function Field (score, layoutStore, upperLeftX, upperLeftY, width, height, lineWidth, brickWidth, brickHeight) {
+function Field(score, layoutStore, upperLeftX, upperLeftY, width, height, lineWidth, brickWidth, brickHeight, maxSpecialBricks) {
     this.score = score;
     this.layoutStore = layoutStore;
     this.upperLeftX = upperLeftX;
@@ -249,10 +253,11 @@ function Field (score, layoutStore, upperLeftX, upperLeftY, width, height, lineW
     this.lineWidth = lineWidth;
     this.brickWidth = brickWidth;
     this.brickHeight = brickHeight;
-    this.colors = ["White", "Red", "Blue", "Yellow", "Magenta", "Green"];
+    this.colors = ["White", "Red"];
     this.leftWallColor = 0;
     this.rightWallColor = 0;
     this.topWallColor = 0;
+    this.maxSpecialBricks = maxSpecialBricks;
     this.bricks = new Array();
 }
 
@@ -296,6 +301,10 @@ Field.prototype.loadLayout = function () {
 
     layout.reset();
 
+    var imgs = this.layoutStore.brickImages;
+
+    var specialBricks = 0;
+
     while (midFieldY - dY > this.upperLeftY + 4 * this.brickHeight) {
         var cond1 = midFieldY - dY;
         var cond2 = this.upperLeftY + 4 * this.brickHeight;
@@ -304,10 +313,10 @@ Field.prototype.loadLayout = function () {
             var cond4 = this.upperLeftX + 2 * this.brickWidth;
             var brickData = layout.giveNextBrickInRow();
             if (brickData.type != 'void') {
-                this.bricks.push(new Brick(midFieldX + dX, midFieldY - dY, this.brickWidth, this.brickHeight, brickData.type, brickData.color));
+                this.bricks.push(new Brick(midFieldX + dX, midFieldY - dY, this.brickWidth, this.brickHeight, brickData.type, imgs[brickData.type]));
                 ++this.score.remainingBricks;
                 if (dX != 0) {
-                    this.bricks.push(new Brick(midFieldX - dX, midFieldY - dY, this.brickWidth, this.brickHeight, brickData.type, brickData.color));
+                    this.bricks.push(new Brick(midFieldX - dX, midFieldY - dY, this.brickWidth, this.brickHeight, brickData.type, imgs[brickData.type]));
                     ++this.score.remainingBricks;
                 }
             }
@@ -318,6 +327,16 @@ Field.prototype.loadLayout = function () {
         dY += 3 * this.brickHeight;
     }
 
+    for (var i = 0; i < this.maxSpecialBricks; ++i) {
+        var j = getRandInt(0, this.bricks.length - 1);
+        var type = 'twoball'
+        if (i < this.maxSpecialBricks / 2) {
+            type = 'speedball';
+        }
+        this.bricks[j].type = type;
+        this.bricks[j].image = imgs[type];
+    }
+    
 };
 
 Field.prototype.bounceBall = function(ball, paddle) {
@@ -367,20 +386,36 @@ Field.prototype.bounceBall = function(ball, paddle) {
 
 function BrickLayoutStore() {
     this.counter = 0;
+    this.brickImages = new Array();
+
+    this.brickImages['basic'] = new Image();
+    this.brickImages['basic'].src = './img/brick_basic.png';
+    this.brickImages['twoball'] = new Image();
+    this.brickImages['twoball'].src = './img/brick_twoball.png';
+    this.brickImages['speedball'] = new Image();
+    this.brickImages['speedball'].src = './img/brick_speedball.png';
+
+
     this.brickLayouts = new Array();
 
     this.brickLayouts[0] = new BrickLayout();
-    this.brickLayouts[0].pattern =  [[{ type: 'void' }, { type: 'void' }, { type: 'basic', color: 'blue' }],  //first row
-                                    [{ type: 'basic', color: 'red' }, { type: 'void' }, { type: 'void' }]];   // second row
+    this.brickLayouts[0].pattern = [
+                                    [{ type: 'void' }, { type: 'void' }, { type: 'basic' }],    //first row
+                                    [{ type: 'basic' }, { type: 'void' }, { type: 'void' }]     //second row
+                                   ];  
 
     this.brickLayouts[1] = new BrickLayout();
-    this.brickLayouts[1].pattern =  [[{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic', color: 'magenta' }],     //first row
-                                    [{ type: 'basic', color: 'yellow' }, { type: 'void' }, { type: 'void' }]];                       //second row
+    this.brickLayouts[1].pattern = [
+                                    [{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic' }],      //first row
+                                    [{ type: 'basic' }, { type: 'void' }, { type: 'void' }]                         //second row
+                                   ];
 
     this.brickLayouts[2] = new BrickLayout();
-    this.brickLayouts[2].pattern =  [[{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic', color: 'red' }],     //first row
-                                    [{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic', color: 'red' }],                       //second row
-                                    [{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic', color: 'red' }]   ];                                     //third row
+    this.brickLayouts[2].pattern = [
+                                    [{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic' }],      //first row
+                                    [{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic' }],                        //second row
+                                    [{ type: 'void' }, { type: 'void' }, { type: 'void' }, { type: 'basic' }]                                           //third row
+                                   ];                                     
 
 }
 
@@ -437,11 +472,12 @@ BrickLayout.prototype.reset = function () {
 
 // **********  Brick  **********
 
-function Brick(middleX, middleY, width, height, type, color) {
+function Brick(middleX, middleY, width, height, type, image) {
     this.middleX = middleX;
     this.middleY = middleY;
     this.width = width;
     this.height = height;
+    this.image = image;
     // p1*****p2
     // *      *
     // *      *
@@ -456,20 +492,13 @@ function Brick(middleX, middleY, width, height, type, color) {
     this.p4Y = this.p3Y;
 
     this.type = type;
-    this.color = color;
     this.exploding = false;
     this.exploded = false;
 }
 
 Brick.prototype.draw = function(ctx, score) {
     if (this.exploding == false) {
-        ctx.beginPath();
-        ctx.rect (this.middleX - this.width /2, this.middleY - this.height/2, this.width, this.height);
-        ctx.fillStyle = this.color;
-        ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = this.color;
-        ctx.stroke();
+        ctx.drawImage(this.image, this.middleX - this.width / 2, this.middleY - this.height / 2, this.width, this.height);
     } else {
         var timeDelta = Date.now() - this.explosionTime;
         if (timeDelta > 3000) {
@@ -481,13 +510,7 @@ Brick.prototype.draw = function(ctx, score) {
         ctx.save();
         ctx.scale(1- timeDelta/3000, 1- timeDelta/3000);
         ctx.globalAlpha = 1 - timeDelta / 3000;
-        ctx.beginPath();
-        ctx.rect (this.middleX - this.width /2, this.middleY - this.height/2, this.width, this.height);
-        ctx.fillStyle = this.color;
-        ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = this.color;
-        ctx.stroke();
+        ctx.drawImage(this.image, this.middleX - this.width / 2, this.middleY - this.height / 2, this.width, this.height);
         ctx.restore();
     }
 
@@ -567,7 +590,6 @@ var Key = {
 
 // **********  End of Keyboard  **********
 
-
 // **********  Utilities  **********
 function getRand(min, max) {
     return Math.random() * (max - min) + min;
@@ -575,6 +597,10 @@ function getRand(min, max) {
 
 function getRandInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1) + min);
+}
+
+function getRandBool(probability) {
+    return probability > getRandInt(1, 100);
 }
 
 function distanceOfPointAndLine(px, py, ax, ay, bx, by) {
