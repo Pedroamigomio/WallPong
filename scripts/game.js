@@ -32,7 +32,7 @@ function createGameParts(){
     var fieldWidth = canvas.width - 20 * BU;
     var fieldHeight = canvas.height - 70 * BU;
     var fieldLineWidth = 2 * BU;
-    var fieldMaxSpecialBricks = 4;
+    var fieldMaxSpecialBricks = 5;
     var brickWidth = 60 * BU;
     var brickHeight = 20 * BU;
     var paddleWidth = 140 * BU;
@@ -46,27 +46,24 @@ function createGameParts(){
     var field = new Field(score, new BrickLayoutStore(), fieldUpperLeftX, fieldUpperLeftY, fieldWidth, fieldHeight, fieldLineWidth, brickWidth, brickHeight, fieldMaxSpecialBricks);
     field.loadLayout();
     var paddle = new Paddle(canvas.width / 2 - paddleWidth / 2, fieldUpperLeftY + fieldHeight, paddleWidth, paddleHeight, paddleSpeed, fieldUpperLeftX, fieldUpperLeftX + fieldWidth, 0.2 * paddleWidth, 0.1 * paddleWidth, Math.PI / 15);
-    var ball = new Ball(canvas.width / 2, field.upperLeftY + field.height * 0.70, ballRadius, ballSpeed, ballDir);
-    ball.pause = true;
-
-    animate(field, paddle, ball, canvas, context, Date.now(), Date.now());
+    var balls = new Balls(canvas.width / 2, field.upperLeftY + field.height * 0.70, ballRadius, ballSpeed, ballDir);
+    balls.createBall(balls.ballStartX, balls.ballStartY);
+    animate(field, paddle, balls, canvas, context, Date.now());
 };
 
 
-function animate(field, paddle, ball, canvas, context, previoustime, ballDelay) {
+function animate(field, paddle, balls, canvas, context, previoustime) {
     var now = Date.now();
     var timediff = (now - previoustime) / 100;  // 0.1 sec
 
     if (field.score.remainingBricks == 0) {
         field.loadLayout();
-        ballDelay = now;
-        ball.x = canvas.width / 2;
-        ball.y = field.upperLeftY + field.height * 0.70;
-        ball.ro = Math.PI / 2;
-        ball.pause = true;
+        balls.resetBalls();
     }
 
-    if (field.bounceBall(ball, paddle) == false) {
+    field.bounceBall(balls, paddle)
+
+    if (balls.balls.length == 0) {
         if (field.score.balls == 0) {
             //game over animation
             context.clearRect(0, 0, canvas.width, canvas.height);
@@ -75,35 +72,67 @@ function animate(field, paddle, ball, canvas, context, previoustime, ballDelay) 
             });
             return;
         }
-        ballDelay = now;
-        ball.x = canvas.width / 2;
-        ball.y = field.upperLeftY + field.height * 0.70;
-        ball.ro = Math.PI / 2;
-        ball.pause = true;
+        balls.createBall(balls.ballStartX, balls.ballStartY);
         --field.score.balls;
     }
 
     paddle.move(timediff);
-    ball.move(timediff);
+    balls.move(timediff);
 
     context.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (ballDelay != 0 && now - ballDelay > 1500) {
-        ball.pause = false;
-        ballDelay = 0;
-    }
 
     field.score.draw(context);
     field.draw(context);
     paddle.draw(context);
-    ball.draw(context);
+    balls.draw(context);
 
     requestAnimFrame(function () {
-        animate(field, paddle, ball, canvas, context, now, ballDelay);
+        animate(field, paddle, balls, canvas, context, now);
     });
 	
 };
 
+
+// **********  Balls  **********
+
+function Balls(ballStartX, ballStartY, ballRadius, ballStartSpeed, ballStartDir) {
+    this.ballStartX = ballStartX;
+    this.ballStartY = ballStartY;
+    this.ballRadius = ballRadius;
+    this.ballStartSpeed = ballStartSpeed;
+    this.ballStartDir = ballStartDir;
+    this.balls = new Array();
+}
+
+Balls.prototype.createBall = function (x, y) {
+    var ball = new Ball(x, y, this.ballRadius, this.ballStartSpeed, this.ballStartDir);
+    ball.pauseFor(1.5);
+    this.balls.push(ball);
+};
+
+Balls.prototype.move = function (timediff) {
+    for (var i = 0; i < this.balls.length; ++i) {
+        this.balls[i].move(timediff);
+    }
+};
+
+Balls.prototype.draw = function (context) {
+    for (var i = 0; i < this.balls.length; ++i) {
+        this.balls[i].draw(context);
+    }
+};
+
+Balls.prototype.resetBalls = function () {
+
+    while (this.balls.length != 0) {
+        this.balls.pop();       // clear array
+    }
+
+    this.createBall(this.ballStartX, this.ballStartY);
+};
+
+
+// **********  End of Balls  **********
 
 // **********  Ball  **********
 
@@ -113,28 +142,47 @@ function Ball(x, y, r, v, ro) {
     this.r = r;
     this.v = v; // px/sec
     this.ro = ro; // rad - 0 is 3 o'clock - clockwise+
-    this.pause = false;
+    this.paused = false; //msec
+    this.speedBonus = 1; //msec
+    this.strokeColor = 'white';
+    this.fillColor = 'white';
+
 }
 
 Ball.prototype.move = function (timediff) {
-    if (this.pause == true) {
+    if (this.paused) {
         return;
     }
-    this.x += this.v * timediff * Math.cos(this.ro);
-    this.y += this.v * timediff * Math.sin(this.ro);
+    this.x += this.speedBonus * this.v * timediff * Math.cos(this.ro);
+    this.y += this.speedBonus * this.v * timediff * Math.sin(this.ro);
 
 };
 
 Ball.prototype.draw = function (context) {
     context.beginPath();
     context.arc(this.x, this.y, this.r, 0, 2 * Math.PI, false);
-    context.fillStyle = 'white';
+    context.fillStyle = this.fillColor;
     context.fill();
     context.lineWidth = 1;
-    context.strokeStyle = 'white';
+    context.strokeStyle = this.strokeColor;
     context.stroke();
 
 };
+
+Ball.prototype.pauseFor = function (seconds) {
+    this.paused = true;
+    var _this = this;
+    setTimeout(function () { _this.paused = false; }, seconds * 1000);
+};
+
+Ball.prototype.speedFor = function (boost, seconds) {
+    this.speedBonus = boost;
+    this.strokeColor = 'red';
+    this.fillColor = 'orange';
+    var _this = this;
+    setTimeout(function () { _this.speedBonus = 1.0; _this.strokeColor = 'white'; _this.fillColor = 'white'; }, seconds * 1000);
+};
+
 // **********  End of Ball  **********
 
 
@@ -299,6 +347,9 @@ Field.prototype.loadLayout = function () {
     var dX = 0;
     var dY = 0;
 
+    this.remainingBricks = 0;
+    this.bricks.splice(0, this.bricks.length);
+
     layout.reset();
 
     var imgs = this.layoutStore.brickImages;
@@ -339,45 +390,55 @@ Field.prototype.loadLayout = function () {
     
 };
 
-Field.prototype.bounceBall = function(ball, paddle) {
+Field.prototype.bounceBall = function(balls, paddle) {
 
-    if (ball.y >= this.upperLeftY + this.height - ball.r && ball.ro < Math.PI) {    // bottom
+    var lostBalls = new Array();
 
-        paddle.bounceBall(ball);
+    for (var i = 0; i < balls.balls.length; ++i) {
 
-        if (ball.y > this.upperLeftY + this.height + paddle.chY && ball.ro < Math.PI) {
-            return false;
+        var ball = balls.balls[i];
+
+        if (ball.y >= this.upperLeftY + this.height - ball.r && ball.ro < Math.PI) {    // bottom
+
+            paddle.bounceBall(ball);
+
+            if (ball.y > this.upperLeftY + this.height + paddle.chY && ball.ro < Math.PI) {
+                lostBalls.push(i);
+            }
+        }
+
+        if (ball.x <= this.upperLeftX + this.lineWidth / 2 + ball.r && ball.ro > Math.PI / 2 && ball.ro < 3 * Math.PI / 2) {  //left wall
+            ball.ro = Math.PI - ball.ro;
+            if (ball.ro < 0) {
+                ball.ro += 2 * Math.PI;
+            }
+            this.leftWallColor < this.colors.length - 1 ? ++this.leftWallColor : this.leftWallColor = 0;
+        }
+
+        if (ball.x >= this.upperLeftX + this.width - this.lineWidth / 2 - ball.r && (ball.ro < Math.PI / 2 || ball.ro > 3 * Math.PI / 2)) { //right wall
+            ball.ro = Math.PI - ball.ro;
+            if (ball.ro < 0) {
+                ball.ro += 2 * Math.PI;
+            }
+            this.rightWallColor < this.colors.length - 1 ? ++this.rightWallColor : this.rightWallColor = 0;
+        }
+
+        if (ball.y <= this.upperLeftY + ball.r && ball.ro > Math.PI) {  // top wall
+            ball.ro = 2 * Math.PI - ball.ro;
+            this.topWallColor < this.colors.length - 1 ? ++this.topWallColor : this.topWallColor = 0;
         }
     }
-   
-    if (ball.x <= this.upperLeftX + this.lineWidth/2 + ball.r && ball.ro > Math.PI / 2 && ball.ro < 3 * Math.PI / 2) {  //left wall
-        ball.ro = Math.PI - ball.ro;
-        if (ball.ro < 0) {
-            ball.ro += 2 * Math.PI;
-        }
-        this.leftWallColor < this.colors.length - 1 ? ++this.leftWallColor : this.leftWallColor = 0;
-    }
 
-    if (ball.x >= this.upperLeftX + this.width - this.lineWidth / 2 - ball.r && (ball.ro < Math.PI / 2 || ball.ro > 3 * Math.PI / 2)) { //right wall
-        ball.ro = Math.PI - ball.ro;
-        if (ball.ro < 0) {
-            ball.ro += 2 * Math.PI;
-        }
-        this.rightWallColor < this.colors.length - 1 ? ++this.rightWallColor : this.rightWallColor = 0;
-    }
-
-    if (ball.y <= this.upperLeftY + ball.r && ball.ro > Math.PI) {  // top wall
-        ball.ro = 2 * Math.PI - ball.ro;
-        this.topWallColor < this.colors.length - 1 ? ++this.topWallColor : this.topWallColor = 0;
+    for (var i = 0; i < lostBalls.length; ++i) {
+        balls.balls.splice(lostBalls[i], 1);
     }
 
     for (var i = 0; i < this.bricks.length; ++i) {
         if (this.bricks[i].exploding == false) {
-            this.bricks[i].bounceBall(ball);                  //check the bricks against the ball
+            this.bricks[i].bounceBall(balls);                  //check the bricks against the ball
         }
     }
 
-    return true;
 };
 // **********  End of Paddle  **********
 
@@ -516,34 +577,54 @@ Brick.prototype.draw = function(ctx, score) {
 
 };
 
-Brick.prototype.bounceBall = function(ball) {   
-    if (ball.x > this.p1X - ball.r &&
-        ball.x < this.p2X + ball.r &&
-        ball.y > this.p1Y - ball.r &&
-        ball.y < this.p3Y + ball.r) 
-    {
-        this.exploding = true;
-        this.explosionTime = Date.now();
+Brick.prototype.bounceBall = function(balls) {   
 
-        if (ball.x >= this.p1X - ball.r && ball.x <= this.p2X + ball.r && ball.y < this.p1Y && ball.ro < Math.PI) { // ball coming from above
-            ball.ro = 2 * Math.PI - ball.ro;
-        }
-        if (ball.x >= this.p1X - ball.r && ball.x <= this.p2X + ball.r && ball.y > this.p3Y && ball.ro > Math.PI) {    // ball coming from below
-            ball.ro = 2 * Math.PI - ball.ro;
-        }
-        if (ball.y >= this.p2Y && ball.y <= this.p3Y && ball.x < this.p1X && (ball.ro < Math.PI / 2 || ball.ro > 3 * Math.PI / 2)) {    // ball coming from left
-            ball.ro = Math.PI - ball.ro;
-            if (ball.ro < 0) {
-                ball.ro += 2 * Math.PI;
+    var newBalls = new Array();
+
+    for (var i = 0; i < balls.balls.length; ++i) {
+
+        var ball = balls.balls[i];
+
+        if (ball.x > this.p1X - ball.r &&
+            ball.x < this.p2X + ball.r &&
+            ball.y > this.p1Y - ball.r &&
+            ball.y < this.p3Y + ball.r) {
+            this.exploding = true;
+            this.explosionTime = Date.now();
+
+            if (this.type == 'twoball') {
+                newBalls.push( {x: this.p1X + this.width / 2, y: this.p1Y + this.height / 2 });
             }
-        }
-        if (ball.y >= this.p2Y && ball.y <= this.p3Y && ball.x > this.p2X && ball.ro > Math.PI / 2 && ball.ro < 3 * Math.PI / 2) {        // ball coming from right
-            ball.ro = Math.PI - ball.ro;
-            if (ball.ro < 0) {
-                ball.ro += 2 * Math.PI;
+
+            if (this.type == 'speedball') {
+                ball.speedFor(1.5, 5);    // 150% for 5 secs
+            }
+
+            if (ball.x >= this.p1X - ball.r && ball.x <= this.p2X + ball.r && ball.y < this.p1Y && ball.ro < Math.PI) { // ball coming from above
+                ball.ro = 2 * Math.PI - ball.ro;
+            }
+            if (ball.x >= this.p1X - ball.r && ball.x <= this.p2X + ball.r && ball.y > this.p3Y && ball.ro > Math.PI) {    // ball coming from below
+                ball.ro = 2 * Math.PI - ball.ro;
+            }
+            if (ball.y >= this.p2Y && ball.y <= this.p3Y && ball.x < this.p1X && (ball.ro < Math.PI / 2 || ball.ro > 3 * Math.PI / 2)) {    // ball coming from left
+                ball.ro = Math.PI - ball.ro;
+                if (ball.ro < 0) {
+                    ball.ro += 2 * Math.PI;
+                }
+            }
+            if (ball.y >= this.p2Y && ball.y <= this.p3Y && ball.x > this.p2X && ball.ro > Math.PI / 2 && ball.ro < 3 * Math.PI / 2) {        // ball coming from right
+                ball.ro = Math.PI - ball.ro;
+                if (ball.ro < 0) {
+                    ball.ro += 2 * Math.PI;
+                }
             }
         }
     }
+
+    for (var i = 0; i < newBalls.length; ++i) {
+        balls.createBall(newBalls[i].x, newBalls[i].y);
+    }
+
 };
 
 // **********  End Of Brick  **********
