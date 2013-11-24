@@ -1,20 +1,17 @@
 
 window.onload = createGameParts;
 
-window.requestAnimFrame = (function(callback) 
-							{return 	window.requestAnimationFrame || 
-										window.webkitRequestAnimationFrame || 
-										window.mozRequestAnimationFrame || 
-										window.oRequestAnimationFrame || 
-										window.msRequestAnimationFrame ||
-										function(callback) {
-											window.setTimeout(callback, 1000 / 60);
-										};
-							})();
+window.requestAnimFrame = (function (callback) {
+    return window.requestAnimationFrame ||
+               window.webkitRequestAnimationFrame ||
+               window.mozRequestAnimationFrame ||
+               window.oRequestAnimationFrame ||
+               window.msRequestAnimationFrame ||
+               function (callback) {
+                   window.setTimeout(callback, 1000 / 60);
+               };
+})(createGameParts);
 							
-
-
-
 
 function createGameParts(){
     var canvas = document.getElementById("gameCanvas");
@@ -95,6 +92,9 @@ function animate(field, paddle, balls, canvas, context, previoustime) {
 
 // **********  Balls  **********
 
+/**
+ * @constructor
+ */
 function Balls(ballStartX, ballStartY, ballRadius, ballStartSpeed, ballStartDir) {
     this.ballStartX = ballStartX;
     this.ballStartY = ballStartY;
@@ -136,6 +136,9 @@ Balls.prototype.resetBalls = function () {
 
 // **********  Ball  **********
 
+/**
+ * @constructor
+ */
 function Ball(x, y, r, v, ro) {
     this.x = x;
     this.y = y;
@@ -188,6 +191,9 @@ Ball.prototype.speedFor = function (boost, seconds) {
 
 // **********  Paddle  **********
 
+/**
+ * @constructor
+ */
 function Paddle(upperLeftX, upperLeftY, width, height, v, leftBoundary, rightBoundary, chamferX, chamferY, delta) {
     this.upperLeftX = upperLeftX;
     this.upperLeftY = upperLeftY;
@@ -253,6 +259,9 @@ Paddle.prototype.draw = function (context) {
 
 // **********  Score  **********
 
+/**
+ * @constructor
+ */
 function Score(leftX, leftY, rightX, rightY, height, ballRadius, ballNumber) {
     this.leftX = leftX;
     this.leftY = leftY;
@@ -291,6 +300,9 @@ Score.prototype.update = function (points) {
 
 // **********  Field  **********
 
+/**
+ * @constructor
+ */
 function Field(score, layoutStore, upperLeftX, upperLeftY, width, height, lineWidth, brickWidth, brickHeight, maxSpecialBricks) {
     this.score = score;
     this.layoutStore = layoutStore;
@@ -445,6 +457,9 @@ Field.prototype.bounceBall = function(balls, paddle) {
 
 // **********  BrickLayoutStore  **********
 
+/**
+ * @constructor
+ */
 function BrickLayoutStore() {
     this.counter = 0;
     this.brickImages = new Array();
@@ -495,10 +510,13 @@ BrickLayoutStore.prototype.getNextLayout = function() {
 
 // **********  BrickLayout  **********
 
+/**
+ * @constructor
+ */
 function BrickLayout() {
     this.row = 0;
     this.col = 0;
-    this.pattern;
+    this.pattern = new Array();
 }
 
 BrickLayout.prototype.giveNextBrickInRow = function () {
@@ -533,6 +551,9 @@ BrickLayout.prototype.reset = function () {
 
 // **********  Brick  **********
 
+/**
+ * @constructor
+ */
 function Brick(middleX, middleY, width, height, type, image) {
     this.middleX = middleX;
     this.middleY = middleY;
@@ -649,23 +670,23 @@ var Key = {
     Down: 40,
 
     isDown: function (keyCode) {
-        return this._pressed[keyCode];
+        return Key._pressed[keyCode];
     },
 
     isLeft: function () {
-        return (this._pressed[this.A] || this._pressed[this.Left]);
+        return (Key._pressed[Key.A] || Key._pressed[Key.Left]);
     },
 
     isRight: function () {
-        return (this._pressed[this.D] || this._pressed[this.Right]);
+        return (Key._pressed[Key.D] || Key._pressed[Key.Right]);
     },
 
     onKeydown: function (event) {
-        this._pressed[event.keyCode] = true;
+        Key._pressed[event.keyCode] = true;
     },
 
     onKeyup: function (event) {
-        delete this._pressed[event.keyCode];
+        delete Key._pressed[event.keyCode];
     }
 };
 
